@@ -9,11 +9,8 @@ find_package(X11 REQUIRED)
 
 add_executable(autoclicker
     src/main.cpp
-    src/UI.cpp
     src/ClickEngine.cpp
-    src/ConfigManager.cpp
     src/HotkeyManager.cpp
-    src/Statistics.cpp
 )
 
 target_link_libraries(autoclicker

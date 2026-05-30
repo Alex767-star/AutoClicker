@@ -1,0 +1,3 @@
+/home/ellilot/autoclicker_cpp/build/CMakeFiles/autoclicker.dir
+/home/ellilot/autoclicker_cpp/build/CMakeFiles/edit_cache.dir
+/home/ellilot/autoclicker_cpp/build/CMakeFiles/rebuild_cache.dir

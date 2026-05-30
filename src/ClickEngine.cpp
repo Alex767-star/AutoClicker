@@ -2,6 +2,7 @@
 #include <X11/extensions/XTest.h>
 #include <chrono>
 #include <thread>
+#include <stdexcept>
 
 ClickEngine& ClickEngine::getInstance() {
     static ClickEngine instance;
@@ -11,6 +12,7 @@ ClickEngine& ClickEngine::getInstance() {
 ClickEngine::ClickEngine() : running(false), active(false), delay_ms(100), button(1),
     click_mode(MODE_SINGLE), target_type(TARGET_CURRENT), saved_x(0), saved_y(0),
     move_radius(50), burst_count(10), click_count(0),
+    start_hotkey("F6"), stop_hotkey("F7"), toggle_hotkey("F8"),
     rng(std::chrono::steady_clock::now().time_since_epoch().count()),
     pos_dist(-move_radius, move_radius), delay_dist(50, 200) {
     
@@ -25,7 +27,7 @@ ClickEngine::~ClickEngine() {
 }
 
 void ClickEngine::start() {
-    if (running) return;
+    if (active) return;
     active = true;
     running = true;
     engine_thread = std::thread(&ClickEngine::engineLoop, this);
@@ -35,6 +37,11 @@ void ClickEngine::stop() {
     active = false;
     if (engine_thread.joinable()) engine_thread.join();
     running = false;
+}
+
+void ClickEngine::toggle() {
+    if (active) stop();
+    else start();
 }
 
 std::pair<int, int> ClickEngine::getCurrentPosition() {
@@ -73,6 +80,8 @@ void ClickEngine::performTripleClick() {
 }
 
 void ClickEngine::engineLoop() {
+    uint16_t burst_remaining = burst_count.load();
+    
     while (active) {
         ClickMode current_mode = click_mode;
         TargetType current_target = target_type;
@@ -106,6 +115,17 @@ void ClickEngine::engineLoop() {
                 performClick();
                 std::this_thread::sleep_for(std::chrono::milliseconds(delay_dist(rng)));
                 continue;
+            case MODE_BURST:
+                if (burst_remaining > 0) {
+                    performClick();
+                    burst_remaining--;
+                    if (burst_remaining == 0) {
+                        active = false;
+                    }
+                    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+                    continue;
+                }
+                break;
             default:
                 performClick();
                 break;

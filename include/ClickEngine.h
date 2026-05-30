@@ -31,7 +31,8 @@ public:
     static ClickEngine& getInstance();
     void start();
     void stop();
-    bool isRunning() const { return running; }
+    void toggle();
+    bool isRunning() const { return active; }
     void setDelay(uint32_t ms) { delay_ms = ms; }
     void setButton(uint8_t btn) { button = btn; }
     void setMode(ClickMode mode) { click_mode = mode; }
@@ -41,6 +42,9 @@ public:
     void setBurstCount(uint16_t count) { burst_count = count; }
     uint64_t getClickCount() const { return click_count; }
     void resetClickCount() { click_count = 0; }
+    void setStartHotkey(const std::string& key) { start_hotkey = key; }
+    void setStopHotkey(const std::string& key) { stop_hotkey = key; }
+    void setToggleHotkey(const std::string& key) { toggle_hotkey = key; }
     
 private:
     ClickEngine();
@@ -66,6 +70,10 @@ private:
     std::atomic<uint16_t> move_radius;
     std::atomic<uint16_t> burst_count;
     std::atomic<uint64_t> click_count;
+    
+    std::string start_hotkey;
+    std::string stop_hotkey;
+    std::string toggle_hotkey;
     
     std::mt19937 rng;
     std::uniform_int_distribution<int> pos_dist;
