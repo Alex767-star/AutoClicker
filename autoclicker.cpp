@@ -10,7 +10,21 @@
 #include <string>
 #include <sstream>
 #include <vector>
-#include <functional>
+#include <random>
+
+enum ClickMode {
+    SINGLE_CLICK,
+    DOUBLE_CLICK,
+    HOLD_CLICK,
+    RANDOM_DELAY,
+    BURST_MODE
+};
+
+enum TargetType {
+    CURRENT_POSITION,
+    SAVED_POSITION,
+    MOVING_TARGET
+};
 
 class AutoClicker {
 private:
@@ -36,8 +50,18 @@ private:
     int selected_button;
     std::string button_labels[3];
     
+    ClickMode click_mode;
+    TargetType target_type;
+    
+    int saved_x, saved_y;
+    int move_radius;
+    int burst_count;
+    int burst_remaining;
+    bool holding;
+    
     std::thread click_thread;
     std::thread hotkey_thread;
+    std::mt19937 rng;
     
     void draw_text(int x, int y, const std::string& text, unsigned long color = 0x00FF00) {
         XSetForeground(display, gc, color);
@@ -56,62 +80,198 @@ private:
     void draw_ui() {
         XClearWindow(display, window);
         
-        draw_text(150, 40, "AutoClicker v1.0", 0xFFFF00);
+        draw_text(150, 30, "AutoClicker PRO v2.0", 0xFFFF00);
         
-        draw_text(50, 90, "Delay (ms):", 0x00FF00);
-        draw_rect(160, 75, 100, 25, 0x333333, true);
-        draw_rect(160, 75, 100, 25, 0x888888, false);
+        draw_text(30, 70, "Delay (ms):", 0x00FF00);
+        draw_rect(140, 55, 100, 25, 0x333333, true);
+        draw_rect(140, 55, 100, 25, 0x888888, false);
         if (delay_editing) {
             std::string display_text = delay_input + "_";
-            draw_text(165, 93, display_text, 0xFFFF00);
+            draw_text(145, 73, display_text, 0xFFFF00);
         } else {
-            draw_text(165, 93, std::to_string(delay_ms), 0x00FF00);
+            draw_text(145, 73, std::to_string(delay_ms), 0x00FF00);
         }
         
-        draw_text(50, 130, "Mouse Button:", 0x00FF00);
+        draw_text(30, 105, "Mouse Button:", 0x00FF00);
         for (int i = 0; i < 3; i++) {
-            int btn_x = 170 + i * 80;
+            int btn_x = 150 + i * 80;
             if (selected_button == i) {
-                draw_rect(btn_x, 115, 70, 25, 0x00AA00, true);
+                draw_rect(btn_x, 90, 70, 25, 0x00AA00, true);
             } else {
-                draw_rect(btn_x, 115, 70, 25, 0x333333, true);
-                draw_rect(btn_x, 115, 70, 25, 0x888888, false);
+                draw_rect(btn_x, 90, 70, 25, 0x333333, true);
+                draw_rect(btn_x, 90, 70, 25, 0x888888, false);
             }
-            draw_text(btn_x + 15, 133, button_labels[i], 0xFFFFFF);
+            draw_text(btn_x + 15, 108, button_labels[i], 0xFFFFFF);
         }
         
-        draw_text(50, 170, "Status:", 0x00FF00);
+        draw_text(30, 140, "Click Mode:", 0x00FF00);
+        const char* modes[] = {"Single", "Double", "Hold", "Random", "Burst"};
+        for (int i = 0; i < 5; i++) {
+            int mode_x = 150 + i * 55;
+            if ((int)click_mode == i) {
+                draw_rect(mode_x, 125, 50, 20, 0xAA6600, true);
+            } else {
+                draw_rect(mode_x, 125, 50, 20, 0x333333, true);
+                draw_rect(mode_x, 125, 50, 20, 0x888888, false);
+            }
+            draw_text(mode_x + 5, 140, modes[i], 0xFFFFFF);
+        }
+        
+        draw_text(30, 175, "Target:", 0x00FF00);
+        const char* targets[] = {"Current", "Saved", "Moving"};
+        for (int i = 0; i < 3; i++) {
+            int target_x = 150 + i * 80;
+            if ((int)target_type == i) {
+                draw_rect(target_x, 160, 70, 20, 0xAA6600, true);
+            } else {
+                draw_rect(target_x, 160, 70, 20, 0x333333, true);
+                draw_rect(target_x, 160, 70, 20, 0x888888, false);
+            }
+            draw_text(target_x + 10, 175, targets[i], 0xFFFFFF);
+        }
+        
+        if (target_type == SAVED_POSITION) {
+            draw_text(30, 210, "Saved Pos:", 0x888888);
+            draw_text(120, 210, "X:" + std::to_string(saved_x) + " Y:" + std::to_string(saved_y), 0xFFFF00);
+            draw_text(30, 230, "[Press F5 to save position]", 0x888888);
+        } else if (target_type == MOVING_TARGET) {
+            draw_text(30, 210, "Move Radius:", 0x888888);
+            draw_rect(140, 195, 60, 20, 0x333333, true);
+            draw_text(145, 210, std::to_string(move_radius), 0x00FF00);
+            draw_text(30, 230, "[+/-] to adjust radius", 0x888888);
+        }
+        
+        draw_text(30, 265, "Status:", 0x00FF00);
         if (clicking) {
-            draw_text(120, 170, "ACTIVE", 0xFF0000);
+            draw_text(100, 265, "ACTIVE", 0xFF0000);
         } else {
-            draw_text(120, 170, "STOPPED", 0x00FF00);
+            draw_text(100, 265, "STOPPED", 0x00FF00);
         }
         
-        draw_text(50, 200, "Clicks:", 0x00FF00);
-        draw_text(120, 200, std::to_string(click_count), 0xFFFF00);
+        draw_text(30, 290, "Clicks:", 0x00FF00);
+        draw_text(100, 290, std::to_string(click_count), 0xFFFF00);
+        
+        if (click_mode == BURST_MODE && burst_remaining > 0) {
+            draw_text(30, 315, "Burst Left:", 0x888888);
+            draw_text(120, 315, std::to_string(burst_remaining), 0xFF6600);
+        }
         
         if (clicking) {
-            draw_rect(140, 220, 120, 35, 0xAA0000, true);
-            draw_text(150, 243, "STOP (F6)", 0xFFFFFF);
+            draw_rect(140, 340, 120, 35, 0xAA0000, true);
+            draw_text(155, 363, "STOP (F6)", 0xFFFFFF);
         } else {
-            draw_rect(140, 220, 120, 35, 0x00AA00, true);
-            draw_text(150, 243, "START (F6)", 0xFFFFFF);
+            draw_rect(140, 340, 120, 35, 0x00AA00, true);
+            draw_text(155, 363, "START (F6)", 0xFFFFFF);
         }
         
-        draw_text(50, 280, "Hotkeys:", 0x888888);
-        draw_text(50, 300, "F6 - Start/Stop", 0x888888);
-        draw_text(50, 320, "ESC - Exit", 0x888888);
+        draw_text(30, 390, "Hotkeys:", 0x666666);
+        draw_text(30, 410, "F6 - Start/Stop  |  ESC - Exit  |  F5 - Save Pos", 0x666666);
+        draw_text(30, 430, "F7 - Single Click |  F8 - Double Click |  F9 - Hold Mode", 0x666666);
         
         XFlush(display);
     }
     
+    int get_current_x() {
+        Window root_return, child_return;
+        int root_x, root_y, win_x, win_y;
+        unsigned int mask;
+        XQueryPointer(display, root, &root_return, &child_return,
+                     &root_x, &root_y, &win_x, &win_y, &mask);
+        return root_x;
+    }
+    
+    int get_current_y() {
+        Window root_return, child_return;
+        int root_x, root_y, win_x, win_y;
+        unsigned int mask;
+        XQueryPointer(display, root, &root_return, &child_return,
+                     &root_x, &root_y, &win_x, &win_y, &mask);
+        return root_y;
+    }
+    
+    void move_mouse_to(int x, int y) {
+        XWarpPointer(display, None, root, 0, 0, 0, 0, x, y);
+        XFlush(display);
+    }
+    
+    void perform_click() {
+        XTestFakeButtonEvent(display, button, True, CurrentTime);
+        XTestFakeButtonEvent(display, button, False, CurrentTime);
+        XFlush(display);
+        click_count++;
+    }
+    
+    void perform_double_click() {
+        perform_click();
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        perform_click();
+    }
+    
     void click_loop() {
+        std::uniform_int_distribution<int> dist(-move_radius, move_radius);
+        
         while (clicking && running) {
-            XTestFakeButtonEvent(display, button, True, CurrentTime);
+            int target_x, target_y;
+            
+            switch (target_type) {
+                case SAVED_POSITION:
+                    target_x = saved_x;
+                    target_y = saved_y;
+                    move_mouse_to(target_x, target_y);
+                    std::this_thread::sleep_for(std::chrono::milliseconds(5));
+                    break;
+                case MOVING_TARGET:
+                    target_x = get_current_x() + dist(rng);
+                    target_y = get_current_y() + dist(rng);
+                    move_mouse_to(target_x, target_y);
+                    std::this_thread::sleep_for(std::chrono::milliseconds(5));
+                    break;
+                default:
+                    break;
+            }
+            
+            switch (click_mode) {
+                case SINGLE_CLICK:
+                    perform_click();
+                    break;
+                case DOUBLE_CLICK:
+                    perform_double_click();
+                    break;
+                case HOLD_CLICK:
+                    if (!holding) {
+                        XTestFakeButtonEvent(display, button, True, CurrentTime);
+                        XFlush(display);
+                        holding = true;
+                    }
+                    break;
+                case RANDOM_DELAY:
+                    {
+                        std::uniform_int_distribution<int> delay_dist(delay_ms / 2, delay_ms * 2);
+                        int random_delay = delay_dist(rng);
+                        perform_click();
+                        std::this_thread::sleep_for(std::chrono::milliseconds(random_delay));
+                    }
+                    break;
+                case BURST_MODE:
+                    if (burst_remaining > 0) {
+                        perform_click();
+                        burst_remaining--;
+                        if (burst_remaining == 0) {
+                            clicking = false;
+                        }
+                    }
+                    break;
+            }
+            
+            if (click_mode != HOLD_CLICK && click_mode != BURST_MODE) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(delay_ms));
+            }
+        }
+        
+        if (holding) {
             XTestFakeButtonEvent(display, button, False, CurrentTime);
             XFlush(display);
-            click_count++;
-            std::this_thread::sleep_for(std::chrono::milliseconds(delay_ms));
+            holding = false;
         }
     }
     
@@ -130,6 +290,25 @@ private:
                 if (keysym == XK_F6) {
                     toggle_clicking();
                     draw_ui();
+                } else if (keysym == XK_F5) {
+                    saved_x = get_current_x();
+                    saved_y = get_current_y();
+                    draw_ui();
+                } else if (keysym == XK_F7) {
+                    click_mode = SINGLE_CLICK;
+                    draw_ui();
+                } else if (keysym == XK_F8) {
+                    click_mode = DOUBLE_CLICK;
+                    draw_ui();
+                } else if (keysym == XK_F9) {
+                    click_mode = HOLD_CLICK;
+                    draw_ui();
+                } else if (keysym == XK_KP_Add || keysym == XK_plus) {
+                    move_radius = std::min(move_radius + 10, 200);
+                    draw_ui();
+                } else if (keysym == XK_KP_Subtract || keysym == XK_minus) {
+                    move_radius = std::max(move_radius - 10, 0);
+                    draw_ui();
                 } else if (keysym == XK_Escape) {
                     running = false;
                     clicking = false;
@@ -143,9 +322,9 @@ private:
     }
     
     void handle_mouse_click(int x, int y) {
-        if (y >= 115 && y <= 140) {
+        if (y >= 90 && y <= 115) {
             for (int i = 0; i < 3; i++) {
-                int btn_x = 170 + i * 80;
+                int btn_x = 150 + i * 80;
                 if (x >= btn_x && x <= btn_x + 70) {
                     selected_button = i;
                     button = i + 1;
@@ -155,14 +334,46 @@ private:
             }
         }
         
-        if (y >= 220 && y <= 255 && x >= 140 && x <= 260) {
+        if (y >= 125 && y <= 145) {
+            for (int i = 0; i < 5; i++) {
+                int mode_x = 150 + i * 55;
+                if (x >= mode_x && x <= mode_x + 50) {
+                    click_mode = (ClickMode)i;
+                    if (click_mode == BURST_MODE) {
+                        burst_remaining = 10;
+                    }
+                    draw_ui();
+                    break;
+                }
+            }
+        }
+        
+        if (y >= 160 && y <= 180) {
+            for (int i = 0; i < 3; i++) {
+                int target_x = 150 + i * 80;
+                if (x >= target_x && x <= target_x + 70) {
+                    target_type = (TargetType)i;
+                    draw_ui();
+                    break;
+                }
+            }
+        }
+        
+        if (y >= 340 && y <= 375 && x >= 140 && x <= 260) {
             toggle_clicking();
             draw_ui();
         }
         
-        if (y >= 75 && y <= 100 && x >= 160 && x <= 260) {
+        if (y >= 55 && y <= 80 && x >= 140 && x <= 240) {
             delay_editing = true;
             delay_input = std::to_string(delay_ms);
+            draw_ui();
+        }
+        
+        if (target_type == MOVING_TARGET && y >= 195 && y <= 215 && x >= 140 && x <= 200) {
+            delay_editing = true;
+            delay_input = std::to_string(move_radius);
+            delay_editing = true;
             draw_ui();
         }
     }
@@ -180,7 +391,11 @@ private:
             try {
                 int new_delay = std::stoi(delay_input);
                 if (new_delay >= 1) {
-                    delay_ms = new_delay;
+                    if (target_type == MOVING_TARGET && delay_editing) {
+                        move_radius = new_delay;
+                    } else {
+                        delay_ms = new_delay;
+                    }
                 }
             } catch (...) {}
             delay_editing = false;
@@ -190,7 +405,10 @@ private:
     
 public:
     AutoClicker() : clicking(false), running(true), delay_ms(100), button(1), click_count(0),
-                    window_width(400), window_height(360), delay_editing(false), selected_button(0) {
+                    window_width(500), window_height(460), delay_editing(false), selected_button(0),
+                    click_mode(SINGLE_CLICK), target_type(CURRENT_POSITION),
+                    saved_x(0), saved_y(0), move_radius(50), burst_count(10), burst_remaining(0), holding(false),
+                    rng(std::chrono::steady_clock::now().time_since_epoch().count()) {
         
         button_labels[0] = "Left";
         button_labels[1] = "Right";
@@ -212,7 +430,7 @@ public:
                                CopyFromParent, InputOutput, CopyFromParent,
                                CWBackPixel | CWEventMask, &attrs);
         
-        XStoreName(display, window, "AutoClicker");
+        XStoreName(display, window, "AutoClicker PRO");
         
         XSelectInput(display, window, ExposureMask | KeyPressMask | ButtonPressMask);
         
@@ -251,6 +469,9 @@ public:
     void toggle_clicking() {
         if (!clicking) {
             clicking = true;
+            if (click_mode == BURST_MODE) {
+                burst_remaining = burst_count;
+            }
             click_thread = std::thread(&AutoClicker::click_loop, this);
         } else {
             clicking = false;
