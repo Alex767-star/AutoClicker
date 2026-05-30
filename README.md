@@ -53,7 +53,7 @@ sudo mv autoclicker-linux-x86_64 /usr/local/bin/autoclicker
 
 # Run
 autoclicker
-
+```
 Windows
 
 Option 1: Download EXE
@@ -101,22 +101,22 @@ s         # Start
 
 🔧 Building from Source
 Linux
-bash
+```bash
 
 git clone https://github.com/Alex767-star/AutoClicker.git
 cd AutoClicker
 mkdir build && cd build
 cmake .. && make -j$(nproc)
 ./autoclicker
-
+```
 Windows (MinGW)
-bash
+```bash
 
 git clone https://github.com/Alex767-star/AutoClicker.git
 cd AutoClicker/windows
 x86_64-w64-mingw32-g++ -static -O2 -std=c++17 -pthread autoclicker_win.cpp -o autoclicker.exe -luser32 -lgdi32 -lwinmm
 autoclicker.exe
-
+```
 📊 Performance
 Mode	Typical CPS	CPU Usage
 Single	1000 (1ms)	~5%
