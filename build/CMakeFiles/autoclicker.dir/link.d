@@ -39,7 +39,6 @@ autoclicker: \
   /usr/lib/i386-linux-gnu/libxcb.so.1 \
   /usr/lib/x86_64-linux-gnu/libxcb.so.1 \
   /usr/lib/x86_64-linux-gnu/libXext.so \
-  /usr/lib/x86_64-linux-gnu/libm.so.6 \
   /lib64/ld-linux-x86-64.so.2 \
   /usr/lib/i386-linux-gnu/libXau.so.6 \
   /usr/lib/x86_64-linux-gnu/libXau.so.6 \
@@ -125,8 +124,6 @@ CMakeFiles/autoclicker.dir/src/HotkeyManager.cpp.o:
 /usr/lib/x86_64-linux-gnu/libxcb.so.1:
 
 /usr/lib/x86_64-linux-gnu/libXext.so:
-
-/usr/lib/x86_64-linux-gnu/libm.so.6:
 
 /lib64/ld-linux-x86-64.so.2:
 

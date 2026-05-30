@@ -4,6 +4,7 @@
 #include <iostream>
 #include <sstream>
 #include <algorithm>
+#include <unistd.h>
 
 HotkeyManager& HotkeyManager::getInstance() {
     static HotkeyManager instance;
@@ -48,7 +49,6 @@ KeyCode HotkeyManager::stringToKeycode(const std::string& keysym) {
 std::string HotkeyManager::keycodeToString(KeyCode keycode) {
     KeySym ks = XKeycodeToKeysym(display, keycode, 0);
     if (ks == NoSymbol) return "Unknown";
-    
     char* name = XKeysymToString(ks);
     if (name) return std::string(name);
     return "Unknown";
@@ -96,8 +96,10 @@ void HotkeyManager::registerHotkey(const std::string& name, const std::string& h
     
     hotkeys[name] = hk;
     
-    XGrabKey(display, keycode, modifiers, root, True, GrabModeAsync, GrabModeAsync);
-    XGrabKey(display, keycode, modifiers | Mod2Mask, root, True, GrabModeAsync, GrabModeAsync);
+    for (int i = 0; i < 8; i++) {
+        unsigned int mod_combo = modifiers | (i << 13);
+        XGrabKey(display, keycode, mod_combo, root, False, GrabModeAsync, GrabModeAsync);
+    }
     XSync(display, False);
     
     std::cout << "[Hotkey] Registered: " << name << " -> " << hotkey_str << std::endl;
@@ -106,8 +108,10 @@ void HotkeyManager::registerHotkey(const std::string& name, const std::string& h
 void HotkeyManager::unregisterHotkey(const std::string& name) {
     auto it = hotkeys.find(name);
     if (it != hotkeys.end()) {
-        XUngrabKey(display, it->second.keycode, it->second.modifiers, root);
-        XUngrabKey(display, it->second.keycode, it->second.modifiers | Mod2Mask, root);
+        for (int i = 0; i < 8; i++) {
+            unsigned int mod_combo = it->second.modifiers | (i << 13);
+            XUngrabKey(display, it->second.keycode, mod_combo, root);
+        }
         hotkeys.erase(it);
     }
 }
@@ -156,7 +160,7 @@ void HotkeyManager::listenerLoop() {
             for (auto& [name, hk] : hotkeys) {
                 if (hk.keycode == keycode && (hk.modifiers == 0 || (modifiers & hk.modifiers) == hk.modifiers)) {
                     if (hk.callback) {
-                        hk.callback();
+                        std::thread([hk]() { hk.callback(); }).detach();
                     }
                     break;
                 }
